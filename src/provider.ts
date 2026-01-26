@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { CodemapMeta, CodemapNode } from './types';
+import type { CodemapFlow, CodemapMeta, CodemapNode } from './types';
 
 function formattedDate(iso: string | undefined): string {
   if (!iso) return '';
@@ -7,29 +7,55 @@ function formattedDate(iso: string | undefined): string {
 }
 
 export class CodemapTreeDataProvider implements vscode.TreeDataProvider<CodemapNode> {
-  private _roots: CodemapNode[] = [];
-  private _meta: CodemapMeta | null = null;
+  private flows: CodemapFlow[] = [];
+  private activeFlowId: string | null = null;
   private _onDidChangeTreeData = new vscode.EventEmitter<CodemapNode | undefined | null | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+  getFlows(): CodemapFlow[] {
+    return this.flows;
+  }
+
+  getActiveFlowId(): string | null {
+    return this.activeFlowId;
+  }
+
+  getActiveFlow(): CodemapFlow | null {
+    if (!this.activeFlowId) return this.flows[0] ?? null;
+    return this.flows.find((f) => f.id === this.activeFlowId) ?? null;
+  }
+
   getRoots(): CodemapNode[] {
-    return this._roots;
+    return this.getActiveFlow()?.roots ?? [];
   }
 
   getMeta(): CodemapMeta | null {
-    return this._meta;
+    return this.getActiveFlow()?.meta ?? null;
   }
 
-  refresh(roots: CodemapNode[], meta?: CodemapMeta | null): void {
-    this._roots = roots;
-    this._meta = meta ?? null;
+  addFlow(flow: CodemapFlow, makeActive = true): void {
+    this.flows = [...this.flows, flow];
+    if (makeActive || !this.activeFlowId) this.activeFlowId = flow.id;
+    this._onDidChangeTreeData.fire();
+  }
+
+  updateFlow(flow: CodemapFlow): void {
+    this.flows = this.flows.map((f) => (f.id === flow.id ? flow : f));
+    this._onDidChangeTreeData.fire();
+  }
+
+  setActiveFlow(id: string): void {
+    if (this.activeFlowId === id) return;
+    const exists = this.flows.some((f) => f.id === id);
+    if (!exists) return;
+    this.activeFlowId = id;
     this._onDidChangeTreeData.fire();
   }
 
   getChildren(node?: CodemapNode): CodemapNode[] {
     if ((node as CodemapNode & { isOverview?: boolean })?.isOverview === true) return [];
     if (!node) {
-      const m = this._meta;
+      const m = this.getMeta();
       const hasMeta = m && (m.title || m.overview || m.createdAt);
       const overviewNode: CodemapNode & { isOverview?: boolean } = {
         label: m?.title || 'Codeflow',
@@ -37,7 +63,7 @@ export class CodemapTreeDataProvider implements vscode.TreeDataProvider<CodemapN
         children: [],
       };
       overviewNode.isOverview = true;
-      return (hasMeta ? [overviewNode] : []).concat(this._roots);
+      return (hasMeta ? [overviewNode] : []).concat(this.getRoots());
     }
     return node.children ?? [];
   }
@@ -45,7 +71,7 @@ export class CodemapTreeDataProvider implements vscode.TreeDataProvider<CodemapN
   getTreeItem(node: CodemapNode): vscode.TreeItem {
     const isOverview = (node as CodemapNode & { isOverview?: boolean }).isOverview === true;
     if (isOverview) {
-      const m = this._meta;
+      const m = this.getMeta();
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
       item.description = node.description;
       item.contextValue = 'codeflowOverview';

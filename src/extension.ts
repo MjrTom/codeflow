@@ -7,9 +7,10 @@ import { CodemapWebviewViewProvider } from './codemapView';
 import { rootsToMermaid } from './mermaid';
 import { isFileTooLarge } from './fsUtil';
 import { setLogChannel, log } from './logger';
-import type { CodemapMeta, CodemapNode } from './types';
+import type { CodemapFlow, CodemapNode } from './types';
 
 let codemapDecoration: { editor: vscode.TextEditor; range: vscode.Range } | null = null;
+let latestCreateToken = 0;
 
 export function activate(context: vscode.ExtensionContext): void {
   const codeflowChannel = vscode.window.createOutputChannel('Codeflow');
@@ -39,15 +40,19 @@ export function activate(context: vscode.ExtensionContext): void {
         placeHolder: 'Question or topic for the codeflow',
       });
       if (prompt == null || prompt.trim() === '') return;
+      const trimmedPrompt = prompt.trim();
+      const token = ++latestCreateToken;
+      const flowId = createFlowId();
       try {
-        const { meta, roots } = await runAgent(prompt.trim());
+        const { meta, roots } = await runAgent(trimmedPrompt);
         meta.createdAt = new Date().toISOString();
-        context.globalState.update('codeflow.meta', meta);
-        provider.refresh(roots, meta);
-        codemapView.update(roots, meta);
+        const flow: CodemapFlow = { id: flowId, prompt: trimmedPrompt, meta, roots };
+        const makeActive = token === latestCreateToken;
+        provider.addFlow(flow, makeActive);
+        codemapView.update(provider.getFlows(), provider.getActiveFlowId());
         const recent = (context.globalState.get<string[]>('codeflow.recentPrompts') ?? []).slice(0, 4);
-        context.globalState.update('codeflow.recentPrompts', [prompt.trim(), ...recent]);
-        context.globalState.update('codeflow.lastPrompt', prompt.trim());
+        context.globalState.update('codeflow.recentPrompts', [trimmedPrompt, ...recent]);
+        if (makeActive) context.globalState.update('codeflow.lastPrompt', trimmedPrompt);
       } catch (e) {
         const msg = (e as Error).message;
         log(`Create failed: ${msg}`);
@@ -110,18 +115,29 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('codeflow.refresh', async () => {
-      const last = context.globalState.get<string>('codeflow.lastPrompt');
-      if (!last) {
+      const active = provider.getActiveFlow();
+      const prompt = active?.prompt ?? context.globalState.get<string>('codeflow.lastPrompt');
+      if (!prompt) {
         await vscode.commands.executeCommand('codeflow.create');
         return;
       }
       try {
-        const oldMeta = context.globalState.get<CodemapMeta>('codeflow.meta');
-        const { meta, roots } = await runAgent(last);
+        const oldMeta = active?.meta;
+        const { meta, roots } = await runAgent(prompt);
         meta.createdAt = oldMeta?.createdAt ?? new Date().toISOString();
-        context.globalState.update('codeflow.meta', meta);
-        provider.refresh(roots, meta);
-        codemapView.update(roots, meta);
+        const flow: CodemapFlow = {
+          id: active?.id ?? createFlowId(),
+          prompt,
+          meta,
+          roots,
+        };
+        if (active) {
+          provider.updateFlow(flow);
+        } else {
+          provider.addFlow(flow, true);
+        }
+        context.globalState.update('codeflow.lastPrompt', prompt);
+        codemapView.update(provider.getFlows(), provider.getActiveFlowId());
       } catch (e) {
         const msg = (e as Error).message;
         log(`Refresh failed: ${msg}`);
@@ -170,6 +186,14 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.commands.executeCommand('workbench.view.extension.codeflow');
     }),
 
+    vscode.commands.registerCommand('codeflow.selectFlow', (id: string) => {
+      if (!id) return;
+      provider.setActiveFlow(id);
+      const active = provider.getActiveFlow();
+      if (active?.prompt) context.globalState.update('codeflow.lastPrompt', active.prompt);
+      codemapView.update(provider.getFlows(), provider.getActiveFlowId());
+    }),
+
     vscode.commands.registerCommand('codeflow.copyPath', (node: CodemapNode) => {
       if (node?.filePath) {
         void vscode.env.clipboard.writeText(node.filePath);
@@ -202,6 +226,10 @@ function buildExportHtml(roots: CodemapNode[]): string {
   <script>mermaid.initialize({startOnLoad:false,theme:'neutral'}); mermaid.run();</script>
 </body>
 </html>`;
+}
+
+function createFlowId(): string {
+  return `flow-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function rootsToLegend(roots: CodemapNode[]): string {

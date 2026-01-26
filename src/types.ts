@@ -18,3 +18,10 @@ export interface CodemapNode {
   number?: string;
   snippet?: string;
 }
+
+export interface CodemapFlow {
+  id: string;
+  prompt: string;
+  meta: CodemapMeta;
+  roots: CodemapNode[];
+}

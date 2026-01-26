@@ -1,16 +1,17 @@
 import * as vscode from 'vscode';
-import type { CodemapMeta, CodemapNode } from './types';
+import type { CodemapFlow, CodemapNode } from './types';
 
 type WebviewMessage =
   | { type: 'openNode'; id: string }
   | { type: 'copyPath'; id: string }
   | { type: 'seeMore'; id: string }
+  | { type: 'selectFlow'; id: string }
   | { type: 'create' };
 
 export class CodemapWebviewViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
-  private roots: CodemapNode[] = [];
-  private meta: CodemapMeta | null = null;
+  private flows: CodemapFlow[] = [];
+  private activeFlowId: string | null = null;
   private nodeById: Map<string, CodemapNode> = new Map();
 
   constructor(private readonly extensionUri: vscode.Uri) {}
@@ -26,6 +27,10 @@ export class CodemapWebviewViewProvider implements vscode.WebviewViewProvider {
       if (!msg || !msg.type) return;
       if (msg.type === 'create') {
         void vscode.commands.executeCommand('codeflow.create');
+        return;
+      }
+      if (msg.type === 'selectFlow') {
+        void vscode.commands.executeCommand('codeflow.selectFlow', msg.id);
         return;
       }
       const node = this.nodeById.get(msg.id);
@@ -48,15 +53,15 @@ export class CodemapWebviewViewProvider implements vscode.WebviewViewProvider {
     this.render();
   }
 
-  update(roots: CodemapNode[], meta?: CodemapMeta | null): void {
-    this.roots = roots;
-    this.meta = meta ?? null;
+  update(flows: CodemapFlow[], activeFlowId?: string | null): void {
+    this.flows = flows;
+    this.activeFlowId = activeFlowId ?? null;
     this.render();
   }
 
   private render(): void {
     if (!this.view) return;
-    const { html, nodeById } = buildHtml(this.view.webview, this.roots, this.meta);
+    const { html, nodeById } = buildHtml(this.view.webview, this.flows, this.activeFlowId);
     this.nodeById = nodeById;
     this.view.webview.html = html;
   }
@@ -64,12 +69,16 @@ export class CodemapWebviewViewProvider implements vscode.WebviewViewProvider {
 
 function buildHtml(
   webview: vscode.Webview,
-  roots: CodemapNode[],
-  meta: CodemapMeta | null
+  flows: CodemapFlow[],
+  activeFlowId: string | null
 ): { html: string; nodeById: Map<string, CodemapNode> } {
   const nonce = getNonce();
   const nodeById = new Map<string, CodemapNode>();
   let nextId = 0;
+  const active =
+    (activeFlowId ? flows.find((f) => f.id === activeFlowId) : undefined) ?? flows[flows.length - 1];
+  const roots = active?.roots ?? [];
+  const meta = active?.meta ?? null;
 
   function nodeId(node: CodemapNode): string {
     const id = `n${++nextId}`;
@@ -132,11 +141,30 @@ function buildHtml(
   const title = meta?.title?.trim() || 'Codeflow';
   const createdAt = meta?.createdAt ? formatDate(meta.createdAt) : '';
   const overview = meta?.overview?.trim() || '';
+  const prompt = active?.prompt?.trim() || '';
+  const promptLine = prompt && prompt !== title ? prompt : '';
 
-  const header = roots.length
+  const flowTabs = flows.length
+    ? `<div class="flow-tabs">${flows
+        .map((flow) => {
+          const isActive = flow.id === active?.id;
+          const flowTitle = (flow.meta.title?.trim() || flow.prompt || 'Codeflow').trim();
+          const flowDate = flow.meta.createdAt ? formatDate(flow.meta.createdAt) : '';
+          const sub = flowDate || flow.prompt || '';
+          return `<button class="flow-tab ${isActive ? 'active' : ''}" data-action="select-flow" data-flow-id="${escapeHtml(flow.id)}" title="${escapeHtml(sub)}">
+  <span class="flow-title">${escapeHtml(flowTitle)}</span>
+  ${sub ? `<span class="flow-sub">${escapeHtml(sub)}</span>` : ''}
+</button>`;
+        })
+        .join('')}</div>`
+    : '';
+
+  const hasFlow = !!active;
+  const header = hasFlow
     ? `<div class="header">
   <div class="title">${escapeHtml(title)}</div>
   ${createdAt ? `<div class="meta">${escapeHtml(createdAt)}</div>` : ''}
+  ${promptLine ? `<div class="prompt">${escapeHtml(promptLine)}</div>` : ''}
   ${overview ? `<div class="overview">${escapeHtml(overview)}</div>` : ''}
 </div>`
     : `<div class="empty">
@@ -184,6 +212,44 @@ function buildHtml(
       padding: 10px;
       margin-bottom: 10px;
     }
+    .flow-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .flow-tab {
+      border: 1px solid var(--cm-border);
+      background: var(--cm-card);
+      color: inherit;
+      border-radius: 999px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .flow-tab.active {
+      border-color: var(--cm-focus);
+      background: var(--vscode-list-activeSelectionBackground, var(--cm-hover));
+      color: var(--vscode-list-activeSelectionForeground, inherit);
+    }
+    .flow-title {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
+    .flow-sub {
+      color: var(--cm-muted);
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
     .title {
       font-size: 13px;
       font-weight: 600;
@@ -193,6 +259,11 @@ function buildHtml(
       margin-top: 6px;
       font-size: 12px;
       line-height: 1.4;
+      color: var(--cm-muted);
+    }
+    .prompt {
+      margin-top: 6px;
+      font-size: 11px;
       color: var(--cm-muted);
     }
     .meta {
@@ -321,6 +392,7 @@ function buildHtml(
 </head>
 <body>
   <div class="container">
+    ${flowTabs}
     ${header}
     ${body}
   </div>
@@ -341,6 +413,11 @@ function buildHtml(
       if (!action) return;
       if (action === 'create') {
         vscode.postMessage({ type: 'create' });
+        return;
+      }
+      if (action === 'select-flow') {
+        const flowId = actionEl.getAttribute('data-flow-id');
+        if (flowId) vscode.postMessage({ type: 'selectFlow', id: flowId });
         return;
       }
       const nodeEl = nodeFor(actionEl);

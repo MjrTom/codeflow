@@ -2,7 +2,7 @@
   "name": "codeflow-codemaps",
   "displayName": "Codeflow - Codemaps",
   "description": "Structured maps of your codebase: execution flow and component relationships. Powered by any OpenAI-compatible LLM.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "DenizhanDaklr",
   "engines": {
     "vscode": "^1.85.0"
@@ -68,7 +68,8 @@
         {
           "id": "codeflow",
           "name": "Codeflow",
-          "type": "webview"
+          "type": "webview",
+          "icon": "media/codeflow.svg"
         }
       ]
     },
