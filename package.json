@@ -1,6 +1,6 @@
 {
-  "name": "codeflow",
-  "displayName": "Codeflow",
+  "name": "codeflow-codemaps",
+  "displayName": "Codeflow - Codemaps",
   "description": "Structured maps of your codebase: execution flow and component relationships. Powered by any OpenAI-compatible LLM.",
   "version": "0.1.0",
   "publisher": "DenizhanDaklr",
