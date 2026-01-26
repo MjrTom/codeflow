@@ -1,0 +1,179 @@
+{
+  "name": "codeflow",
+  "displayName": "Codeflow",
+  "description": "Structured maps of your codebase: execution flow and component relationships. Powered by any OpenAI-compatible LLM.",
+  "version": "0.1.0",
+  "publisher": "DenizhanDaklr",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "repository": "https://github.com/zelosleone/codeflow",
+  "icon": "media/codeflow.png",
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Codeflow",
+      "properties": {
+        "codeflow.apiBase": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of the API. If it ends with a version (e.g. /v4), we append /chat/completions; otherwise /v1/chat/completions. Examples: https://api.openai.com, https://your-api.com/v4"
+        },
+        "codeflow.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the LLM endpoint."
+        },
+        "codeflow.model": {
+          "type": "string",
+          "default": "modelname",
+          "description": "Model name."
+        },
+        "codeflow.maxTokens": {
+          "type": "number",
+          "default": 120000,
+          "description": "Max tokens for LLM responses."
+        },
+        "codeflow.timeoutMs": {
+          "type": "number",
+          "default": 0,
+          "description": "Client-side request timeout in ms. 0 = no timeout (rely on API)."
+        },
+        "codeflow.include": {
+          "type": "string",
+          "default": "**/*.{ts,tsx,js,jsx,py,go,rs,java,kt}",
+          "description": "Glob for findFiles include."
+        },
+        "codeflow.exclude": {
+          "type": "string",
+          "default": "**/node_modules/**,**/.git/**,**/dist/**,**/build/**",
+          "description": "Glob for findFiles exclude."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeflow",
+          "title": "Codeflow",
+          "icon": "media/codeflow.svg"
+        }
+      ]
+    },
+    "views": {
+      "codeflow": [
+        {
+          "id": "codeflow",
+          "name": "Codeflow",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codeflow",
+        "contents": "No codeflow yet.\n[Create Codeflow](command:codeflow.create)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "codeflow.create",
+        "title": "Create Codeflow",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.openNode",
+        "title": "Go to Symbol",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.refresh",
+        "title": "Refresh Codeflow",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.openGraph",
+        "title": "Open as Graph",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.exportJSON",
+        "title": "Export as JSON",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.exportHTML",
+        "title": "Export as HTML",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.focusView",
+        "title": "Focus on Codeflow View",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.copyPath",
+        "title": "Copy Path",
+        "category": "Codeflow"
+      },
+      {
+        "command": "codeflow.seeMore",
+        "title": "See more",
+        "category": "Codeflow"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codeflow.create",
+          "when": "view == codeflow",
+          "group": "navigation"
+        },
+        {
+          "command": "codeflow.openGraph",
+          "when": "view == codeflow"
+        },
+        {
+          "command": "codeflow.refresh",
+          "when": "view == codeflow"
+        },
+        {
+          "command": "codeflow.exportJSON",
+          "when": "view == codeflow"
+        },
+        {
+          "command": "codeflow.exportHTML",
+          "when": "view == codeflow"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codeflow.openNode",
+          "when": "view == codeflow && (viewItem == codeflowNode || viewItem == codeflowSection)",
+          "group": "inline"
+        },
+        {
+          "command": "codeflow.copyPath",
+          "when": "view == codeflow && (viewItem == codeflowNode || viewItem == codeflowSection)"
+        },
+        {
+          "command": "codeflow.seeMore",
+          "when": "view == codeflow && viewItem == codeflowSection"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.30",
+    "@types/vscode": "1.85.0",
+    "typescript": "5.9.3"
+  }
+}
